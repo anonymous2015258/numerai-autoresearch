@@ -1,4 +1,4 @@
-# EXPERIMENT: downsample every 2nd era instead of every 4th to double training data
+# EXPERIMENT: increase max_depth to 6 and num_leaves to 63 for moderately deeper trees
 
 import json
 import pandas as pd
@@ -14,8 +14,8 @@ TARGET_COL = "target"
 MODEL_PARAMS = dict(
     n_estimators=5000,
     learning_rate=0.005,
-    max_depth=5,
-    num_leaves=2**5 - 1,
+    max_depth=6,
+    num_leaves=2**6 - 1,
     colsample_bytree=0.1,
     subsample=0.8,
     subsample_freq=1,
