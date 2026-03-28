@@ -77,12 +77,12 @@ while true; do
     echo "━━━ Iteration $ITERATION  [$TIMESTAMP] ━━━"
     echo "━━━ Iteration $ITERATION  [$TIMESTAMP] ━━━" >> "$LOG_FILE"
 
-    # Run one Claude Code iteration (non-interactive)
-    "$CLAUDE_BIN" \
+    # Run one Claude Code iteration (non-interactive), timeout after 60 min
+    timeout 3600 "$CLAUDE_BIN" \
         --allowedTools "Read,Edit,Write,Bash,Glob,Grep" \
         --model claude-sonnet-4-6 \
         -p "$(cat "$SCRIPT_DIR/loop_prompt.md")" \
-        2>&1 | tee -a "$LOG_FILE"
+        2>&1 | tee -a "$LOG_FILE" || echo "[pipeline] iteration $ITERATION timed out or errored — continuing" | tee -a "$LOG_FILE"
 
     echo "" | tee -a "$LOG_FILE"
 

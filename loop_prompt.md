@@ -23,6 +23,7 @@ has not been tried yet and is likely to improve CORR Sharpe. Do not stack multip
 ```
 python3.10 train.py
 ```
+**IMPORTANT: run this as a foreground command — do NOT use background execution or `run_in_background=true`.**
 If it crashes or raises an exception:
 - Restore train.py: `git restore train.py`
 - Skip to step 7 with status=crashed and corr_sharpe=0, mmc_sharpe=0
@@ -31,6 +32,7 @@ If it crashes or raises an exception:
 ```
 python3.10 evaluate.py
 ```
+**IMPORTANT: run this as a foreground command — do NOT use background execution.**
 Read `metrics.json` to get the results.
 
 ### 7. Decide: keep or revert

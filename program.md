@@ -4,49 +4,103 @@
 Maximize **CORR Sharpe** on the held-out validation eras.
 Secondary goal: keep **MMC Sharpe > 0** (we want to be additive to the Numerai Meta Model).
 
-## Current best (update this after each session)
-- CORR Sharpe: 0.0 (not yet established — first run will set baseline)
-- MMC Sharpe: 0.0
+## Current best (after 11 iterations)
+- CORR Sharpe: **1.5504**
+- MMC Sharpe: 0.855
+- Config: medium features (780), LightGBM, n_estimators=5000, lr=0.005, max_depth=7,
+  num_leaves=127, colsample_bytree=0.1, subsample=0.8, subsample_freq=1,
+  downsample every 2nd era, target ensemble (target + target_cyrusd_20 + target_victor_20)
 
-## Search space — ideas to explore (roughly in priority order)
+---
 
-### Feature sets
-- [ ] Switch from `small` (42) → `medium` (780 features)
-- [ ] Switch from `small` → `all` (2748 features)
-- [ ] Use all eras instead of downsampling every 4th era
+## ✅ Already explored (do NOT retry these)
+- [x] small features → medium features (big win)
+- [x] rank predictions within era (hurt badly — do not retry)
+- [x] colsample_bytree 0.1 → 0.3 (worse)
+- [x] n_estimators 2000 → 5000, lr 0.01 → 0.005 (small win)
+- [x] subsample=0.8, subsample_freq=1 (small win)
+- [x] downsample every 2nd era (small win)
+- [x] use all eras / no downsampling (worse — old eras have distribution drift)
+- [x] max_depth 5→6, num_leaves 31→63 (small win)
+- [x] target_cyrus — CRASHED due to wrong name. Correct name: `target_cyrusd_20`
+- [x] target ensemble (target + target_cyrusd_20 + target_victor_20) — big win (+0.072 corr_sharpe)
 
-### Target selection
-- [ ] Train on `target_cyrus` instead of `target` (often stronger signal)
-- [ ] Train on `target_jerome`
-- [ ] Train on `target_victor`
-- [ ] Ensemble predictions from 2-3 targets (average their predictions)
+---
 
-### Model hyperparameters
-- [ ] Increase `n_estimators` to 5000 with `learning_rate=0.005`
-- [ ] Try "deep" config: `n_estimators=30_000`, `learning_rate=0.001`, `max_depth=10`, `num_leaves=1024`, `min_data_in_leaf=10000`
-- [ ] Increase `colsample_bytree` to 0.3 or 0.5
-- [ ] Add `subsample=0.8` and `subsample_freq=1`
+## 🎯 Priority ideas for next batch (focus on ensembling & alternative targets)
 
-### Feature engineering
-- [ ] Normalize predictions per era (rank within each era before outputting)
-- [ ] Add era-level feature means as additional features
-- [ ] Drop features with near-zero variance across eras
+### 1. Target ensembling (HIGHEST PRIORITY — try this first)
+Train the current best LightGBM config on MULTIPLE targets independently,
+then average their predictions. This is fast (same model, same features) and
+tends to improve both CORR and MMC because different targets capture different
+return signals.
 
-### Model architecture
-- [ ] Try XGBoost instead of LightGBM
-- [ ] Try CatBoost
-- [ ] Try a simple neural network (MLPRegressor or torch)
+Implementation pattern:
+```python
+TARGETS = ["target", "target_cyrusd_20", "target_victor_20"]
+preds = []
+for t in TARGETS:
+    m = lgb.LGBMRegressor(**MODEL_PARAMS)
+    m.fit(train[features], train[t])
+    preds.append(m.predict(validation[features]))
+validation["prediction"] = np.mean(preds, axis=0)
+```
+Note: all 3 targets exist in both train.parquet and validation.parquet columns.
+Load them: `columns=["era", "target"] + TARGETS + features`
+
+### 2. XGBoost + LightGBM ensemble
+Train one XGBoost model and one LightGBM model, average predictions.
+```python
+import xgboost as xgb
+xgb_model = xgb.XGBRegressor(n_estimators=2000, learning_rate=0.005,
+                               max_depth=6, subsample=0.8, colsample_bytree=0.1)
+# average: (lgbm_preds + xgb_preds) / 2
+```
+
+### 3. Per-era prediction mean-centering (NOT ranking)
+Subtract the mean prediction within each era (not rank normalization — that hurt).
+This removes any era-level bias.
+```python
+validation["prediction"] = validation.groupby("era")["prediction"].transform(
+    lambda x: x - x.mean()
+)
+```
+
+### 4. Alternative single targets (try if ensembling crashes)
+- `target_cyrusd_20` — known strong signal
+- `target_victor_20` — known strong signal
+- `target_jerome_20` — alternative signal
+
+### 5. "Deep" LightGBM config (if time budget allows)
+```python
+MODEL_PARAMS = dict(
+    n_estimators=30_000,
+    learning_rate=0.001,
+    max_depth=10,
+    num_leaves=1024,
+    colsample_bytree=0.1,
+    min_data_in_leaf=10000,
+    subsample=0.8,
+    subsample_freq=1,
+)
+```
+
+### 6. all feature set (2748 features) with current best model
+May require more RAM but worth trying.
+
+---
 
 ## Constraints
 - Must run in < 45 minutes total (train + evaluate)
 - No external data sources
-- No new pip installs beyond what is already installed
+- No new pip installs — xgboost and numpy are already installed
 - Output file interface must stay the same: `validation_predictions.parquet` with columns `[era, prediction, target]`
+- `target` column in output must always be the default `target`, regardless of what was trained on
 
 ## Notes on Numerai domain
 - Features are binned integers 0-4; missing data is coded as 2
 - Targets are binned floats: 0, 0.25, 0.5, 0.75, 1.0
 - Each era is one week; targets measure 20-business-day forward returns
-- Era-based scoring is the ground truth — single-era overfitting is penalized
 - The 4-era embargo is mandatory (already in train.py — do not remove it)
-- Prediction neutralization (rank within era) often improves Sharpe by reducing drawdown
+- Do NOT rank predictions within era — it was tested and hurt badly
+- Per-era MEAN-centering (subtracting mean, not ranking) is untested and promising
