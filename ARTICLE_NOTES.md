@@ -177,76 +177,363 @@ the human handles strategy.
 
 ## 5. Important Findings
 
-### ML Findings
+---
 
-**The single biggest gain: feature set size (+64% Sharpe)**
-Switching from `small` (42 features) to `medium` (780 features) jumped
-CORR Sharpe from 0.84 → 1.38 in one step. More features = more signal.
-The agent found this on iteration 3.
+### 5.1 ML Findings
 
-**More data has diminishing returns**
-- Every 4th era → every 2nd era: +2.3% (good)
-- Every era (all data): -6.5% (bad — old eras have distribution drift)
-Old stock market data is less predictive. Recent data matters more.
+#### Finding 1: Feature Set Size Was the Single Biggest Lever (+64% in One Step)
 
-**Tree depth sweet spot: max_depth=7, num_leaves=127**
-Sequential improvements: depth 5 → 6 → 7 each helped. Depth 8+ not tried.
-Going from 31 to 127 leaves enabled richer feature interactions.
+The agent's very first productive idea — on iteration 3 — was to switch from
+the `small` feature set (42 features) to `medium` (780 features). CORR Sharpe
+jumped from **0.84 to 1.38 in a single training run**. No architecture change.
+No hyperparameter tuning. Just more input signal.
 
-**Regularization findings:**
-- `subsample=0.8` (row sampling): small win (+0.4%)
-- `min_child_samples=200`: slightly hurt (agent over-regularized)
-- `colsample_bytree 0.1→0.3`: hurt (0.1 already samples ~78/780 features per tree)
+This is a striking result because it goes against the instinct to start simple.
+The `small` set was advertised as having the "highest feature importance" — but
+importance in isolation does not mean the same as joint predictive power.
+780 features give LightGBM far more combinations to exploit.
 
-**Target ensembling was the breakthrough**
-Training 3 separate models on different targets (`target`, `target_cyrusd_20`,
-`target_victor_20`) and averaging predictions pushed CORR Sharpe to **1.550**
-— the highest result. Different targets capture different aspects of returns;
-averaging reduces variance.
+What makes this finding valuable: a human experimenter might spend days tuning
+model architecture before revisiting feature selection. The agent — given a
+clean priority list in `program.md` — went straight there on iteration 3.
+
+**Takeaway:** In tabular ML, feature set breadth often dominates model
+sophistication. Explore data breadth before model depth.
+
+---
+
+#### Finding 2: More Training Data Has Diminishing Returns — and Can Hurt
+
+The training data is organized into `eras` (weekly snapshots). The baseline
+used every 4th era to save memory. The agent methodically explored this:
+
+| Training data | CORR Sharpe | Change |
+|---|---|---|
+| Every 4th era (~375 eras) | 1.400 | baseline |
+| Every 2nd era (~750 eras) | 1.431 | **+2.3%** ✅ |
+| Every era (~1,500 eras) | 1.352 | **-6.5%** ❌ |
+
+The surprising result: using ALL available eras hurt performance. Why?
+
+Numerai's dataset spans ~28 years. The oldest eras (early 2000s) describe a
+structurally different stock market — fewer quant funds, different market
+microstructure, different factor dynamics. Training on them adds noise that
+overwhelms the signal from recent eras.
+
+This is a domain-specific nuance the agent discovered empirically without
+any financial knowledge. It tried all three options and the data told the story.
+
+**Takeaway:** More historical data is not always better in financial ML.
+Recency bias can be a feature, not a bug.
+
+---
+
+#### Finding 3: Tree Depth Improvements Were Consistent But Incremental
+
+The agent incrementally deepened the tree structure across three iterations:
+
+| Config | CORR Sharpe | Change |
+|---|---|---|
+| max_depth=5, num_leaves=31 | 1.405 | starting point |
+| max_depth=6, num_leaves=63 | 1.454 | **+1.7%** ✅ |
+| max_depth=7, num_leaves=127 | 1.479 | **+1.7%** ✅ |
+
+Each doubling of leaves allowed the model to capture more complex feature
+interactions — a stock's P/E ratio matters differently depending on its sector,
+size, and momentum, and deeper trees can encode these conditional relationships.
+
+The pattern of consistent small gains shows the agent exploring a smooth
+optimization landscape. It did not jump to depth=10 immediately
+(which would risk overfitting) — it incrementally validated each step.
+
+Notably: adding `min_child_samples=200` (a leaf-level regularization) at
+depth=7 slightly hurt performance. The model at this depth needs flexible
+leaf splitting; over-constraining it removes the benefit of the extra depth.
+
+**Takeaway:** Depth improvements in LightGBM are best explored incrementally.
+Pair depth increases with validation, not bulk regularization.
+
+---
+
+#### Finding 4: Stochastic Regularization Helped; Feature Subsampling Did Not
+
+Two regularization experiments had opposite outcomes:
+
+**`subsample=0.8` (row subsampling): +0.4%**
+Each tree is built on a random 80% of training rows. This injects noise that
+prevents the model from memorizing era-specific patterns — effectively a form
+of temporal dropout. Small but consistent win.
+
+**`colsample_bytree=0.3` (feature subsampling): -0.65%**
+Increasing the feature sampling ratio from 0.1 to 0.3 hurt. With 780 features,
+`colsample_bytree=0.1` already samples ~78 features per tree — a rich enough
+set. Increasing to 0.3 (~234 features) forces trees to consider redundant
+features, adding noise without adding signal.
+
+The lesson: feature subsampling at `colsample_bytree=0.1` is already aggressive
+enough for a 780-feature dataset. Row subsampling addresses a different
+problem (temporal overfitting) and remains beneficial.
+
+---
+
+#### Finding 5: Target Ensembling Was the Breakthrough (+4.8%)
+
+The biggest single jump after the feature set expansion came from ensembling
+across multiple targets. Instead of training one model to predict `target`,
+the agent trained three separate LightGBM models:
+- `target` — the standard 20-day return
+- `target_cyrusd_20` — a different definition of 20-day stock-specific returns
+- `target_victor_20` — another variant
+
+Final prediction = average of all three model outputs.
+
+Result: CORR Sharpe **1.479 → 1.550** (+4.8%), the highest in the entire run.
+MMC Sharpe also improved from 0.896 to 0.855 — meaning the ensemble remained
+additive to the meta model.
+
+**Why this works:** Each target measures future returns slightly differently —
+different factor neutralization, different return windows, different
+smoothing. A model trained on `target_cyrusd_20` learns patterns that a
+`target`-trained model misses. Averaging their predictions reduces prediction
+variance while preserving the signal each individually captures.
+
+**The cost:** Training time tripled. 1 model ≈ 25 min. 3 models ≈ 65 min per
+iteration. This forced a hard tradeoff: the best-scoring approach was also the
+slowest to iterate on. We eventually rolled back to the single-model baseline
+to keep the research loop fast.
+
+**Takeaway:** Target ensembling is one of Numerai's most reliable techniques.
+It is essentially free in terms of feature engineering but expensive in compute.
+The right time to use it is after the single-model configuration is well-optimized.
+
+---
+
+#### Finding 6: Era-Level Prediction Transformations Were Largely Ineffective
+
+Two post-processing transformations were tested after model training:
+
+**Ranking predictions within era: catastrophic (−54%)**
+This was the agent's very first proposed change after establishing baseline.
+Converting raw model scores to within-era ranks dropped CORR Sharpe from
+0.84 to 0.39 — nearly half the signal destroyed.
+
+Why? LightGBM's raw outputs already encode the correct relative ordering.
+Rank-transforming them discards the *magnitude* of predicted differences
+between stocks. A stock predicted at 0.52 vs one at 0.50 represents a
+meaningful signal difference; both becoming adjacent ranks eliminates this.
+Numerai's `numerai_corr` scoring function already handles cross-era
+normalization — applying it manually beforehand is double-normalization.
 
 **Per-era mean-centering: no effect**
-Subtracting the era mean from predictions made no difference on CORR Sharpe.
-The Numerai scoring function already normalizes per era.
+Subtracting each era's mean prediction before scoring had zero impact.
+Again, Numerai's scoring is already per-era — there is nothing to remove.
 
-**Ranking predictions within era: catastrophic**
-Converting predictions to within-era ranks destroyed performance (0.84 → 0.39).
-LightGBM's raw output already encodes relative ordering; re-ranking loses
-calibration information.
+Both findings point to the same principle: do not pre-process predictions
+in ways that replicate what the scoring function already does.
 
-### Pipeline / Engineering Findings
+---
 
-**`tail -f` deadlock:** The agent spontaneously decided to run training as a
-background process and monitor it with `tail -f`. `tail -f` never exits on a
-completed file — the iteration ran for 1h47min doing nothing.
+### 5.2 Pipeline & Engineering Findings
 
-**macOS vs Linux:** `timeout` (GNU coreutils) is not available on macOS.
-Had to replace with a bash watchdog (background `sleep` + `kill`).
+#### Engineering Finding 1: The `tail -f` Deadlock (1h 47min Lost)
 
-**Baseline score drift:** Rolling back `train.py` without updating the reference
-score caused all subsequent experiments to appear as failures. The agent was
-comparing single-model results against the ensemble's superior score.
-Solution: explicit `BATCH_BASELINE:` override in `program.md`.
+This was the most dramatic failure of the entire run.
 
-**Target name precision matters:** `target_cyrus` ≠ `target_cyrusd_20`.
-One wrong character in `program.md` caused a crash on the first target experiment.
-Lesson: always give the agent exact column names, not approximations.
+The agent was asked to run `python3.10 train.py` to train a model. Instead of
+running it as a foreground process (which blocks until done and returns output),
+the agent decided to run it as a **background process** and monitor its output
+with `tail -f`:
 
-**Iteration time scales with model count:** 1 model × every-2nd-era ≈ 25 min.
-3 models × every-2nd-era ≈ 65 min. The relationship is linear. Runtime budgets
-must account for ensembling multipliers.
-
-### The Key Metric Journey
-
-```
-Iteration  1:  0.84  ← baseline (LightGBM, small features, 4th era)
-Iteration  3:  1.38  ← medium features  (+64%)
-Iteration  5:  1.40  ← more estimators  (+1.4%)
-Iteration  7:  1.41  ← subsample        (+0.4%)
-Iteration  8:  1.43  ← more training data (+1.9%)
-Iteration 10:  1.45  ← deeper trees     (+1.7%)
-Iteration 12:  1.48  ← deeper trees     (+1.7%)
-Iteration 13:  1.55  ← 3-target ensemble (+4.8%)  ← BEST
+```bash
+python3.10 train.py &
+tail -f <output_file>
 ```
 
-**Total improvement over 13 successful iterations: +84% CORR Sharpe**
-From 0.84 → 1.55 with zero human-written model code.
+Training completed normally — the last line of output read:
+```
+Validation predictions saved: 1,966,115 rows across 316 eras
+```
+
+But `tail -f` does not exit when a file stops being written to.
+It polls indefinitely, waiting for more output that will never come.
+The agent was stuck — waiting for its own monitoring tool to finish.
+
+The child process had accumulated **1 minute 55 seconds of CPU time over
+1 hour 47 minutes of wall time** — 98% of the iteration was spent doing nothing.
+
+Discovery: checking `ps aux` showed no `python3.10` process (training had
+finished), but the parent `claude` subprocess had a child:
+```
+/bin/zsh -c ... tail -f <task_output_file>
+```
+Killing that child shell immediately unblocked the parent and the pipeline
+continued to the next iteration.
+
+**Root cause:** The agent's Bash tool supports `run_in_background=true` for
+long-running commands. The agent used it for training, correctly anticipating
+that training would be slow. But `tail -f` monitoring a completed file is an
+infinite wait. The fix was a one-line instruction in `loop_prompt.md`:
+```
+IMPORTANT: run this as a foreground command — do NOT use background execution.
+```
+
+**Lesson:** When giving agents long-running shell commands, explicitly specify
+foreground execution. Agents will reasonably try to be "helpful" by running
+things in the background — but the monitoring pattern they reach for (`tail -f`)
+has no natural exit condition.
+
+---
+
+#### Engineering Finding 2: The `timeout` Command Does Not Exist on macOS
+
+After the `tail -f` incident, the obvious fix was a time limit on each
+iteration. Adding `timeout 3600 claude ...` to `pipeline.sh` seemed straightforward.
+
+The next run output:
+```
+./pipeline.sh: line 81: timeout: command not found
+[pipeline] iteration 1 timed out or errored — continuing
+[pipeline] iteration 2 timed out or errored — continuing
+```
+
+Both iterations completed in under 5 seconds. No training ran at all.
+
+`timeout` is a GNU coreutils command — standard on Linux, absent on macOS's
+BSD-derived shell. The `|| echo "[pipeline] timed out"` safety net meant the
+pipeline silently swallowed the error and moved on, making it look like two
+successful (but empty) iterations.
+
+**Fix:** A macOS-native watchdog using pure bash:
+```bash
+"$CLAUDE_BIN" ... &
+CLAUDE_PID=$!
+( sleep 3600; kill "$CLAUDE_PID" 2>/dev/null ) &
+WATCHDOG_PID=$!
+wait "$CLAUDE_PID" || true
+kill "$WATCHDOG_PID" 2>/dev/null || true
+```
+This spawns a background timer that kills the main process after 60 minutes
+if it is still running. No external dependencies.
+
+**Lesson:** Never assume GNU coreutils availability when writing shell scripts
+for macOS. `timeout`, `date -d`, `readlink -f`, and `sed -i` all behave
+differently or are absent. Test on the target platform.
+
+---
+
+#### Engineering Finding 3: Baseline Score Drift After Rollback
+
+We rolled back `train.py` from the 3-target ensemble (CORR Sharpe 1.550,
+but slow) to the single-model baseline (1.479) to get faster iterations.
+
+What we forgot: `results.tsv` still contained the ensemble's 1.550 row
+as a `success`. The agent's loop_prompt.md said:
+> "find the highest corr_sharpe among rows with status=success"
+
+So for every subsequent experiment, the agent was comparing against 1.550.
+Every single-model experiment scored 1.47–1.48 — all correctly logged as
+`failed`. Two full iterations were wasted before we noticed.
+
+The symptom was subtle: results.tsv showed valid-looking metric values,
+just marked `failed`. Without reading the description column it looked like
+the experiments were genuinely not improving.
+
+**Fix:** Added a `BATCH_BASELINE:` key to `program.md` and updated
+`loop_prompt.md` to check for it:
+```
+BATCH_BASELINE: 1.4786
+(The 1.550357 in results.tsv was from a slow ensemble — rolled back.
+Compare against 1.4786.)
+```
+
+**Lesson:** When a research pipeline allows rollbacks, the scoring reference
+must be explicitly managed. The `results.tsv` log of historical scores is not
+the same as the "current working baseline." Decouple them.
+
+---
+
+#### Engineering Finding 4: Target Column Name Precision
+
+`program.md` listed a target to explore as `target_cyrus`. The actual column
+name in Numerai v5.2 is `target_cyrusd_20`. One character difference.
+
+The agent read `program.md`, used `target_cyrus` literally in `train.py`,
+and `train.py` crashed with a `KeyError` on the first target experiment.
+Logged as `crashed` with `corr_sharpe=0.000000` in `results.tsv`.
+
+The iteration was not retried — the agent moved on and the correct target
+went unexplored for multiple batches.
+
+**Fix:** Updated `program.md` with exact, copy-pasteable column names for
+all 41 targets, sourced directly from `features.json`.
+
+**Lesson:** `program.md` is not prose — it is instructions that will be
+executed verbatim. Every name, path, and parameter in it should be exact.
+Approximations that a human would understand ("target_cyrus ≈ target_cyrusd_20")
+will break an agent that does not autocorrect.
+
+---
+
+#### Engineering Finding 5: The claude Binary Is Not on the System PATH
+
+`pipeline.sh` called `claude` directly. When invoked as a subprocess from
+another process (rather than from an interactive shell), the `$PATH` does not
+include VS Code extension directories.
+
+```
+ERROR: 'claude' CLI not found. Install Claude Code first.
+```
+
+Claude Code is bundled inside the VS Code extension, not installed as a
+system binary. The binary lives at a path like:
+```
+~/.vscode/extensions/anthropic.claude-code-2.1.86-darwin-x64/
+    resources/native-binary/claude
+```
+
+**Fix:** Auto-discover the latest version at runtime:
+```bash
+CLAUDE_BIN=$(
+    find "$HOME/.vscode/extensions" -path "*/native-binary/claude" -type f \
+    | sort -V | tail -1
+)
+```
+
+This finds all installed Claude Code versions, sorts semantically, and picks
+the latest. If Claude Code is also on PATH (e.g., installed via `npm install -g`),
+that takes priority.
+
+**Lesson:** Subprocesses do not inherit interactive shell PATH. Always resolve
+tool binaries to absolute paths in automation scripts.
+
+---
+
+### 5.3 The Key Metric Journey
+
+```
+Iter  1:  0.8415  ← baseline: LightGBM, small features (42), every 4th era
+Iter  3:  1.3808  ← medium features (780)              [+64.1%] ★ biggest jump
+Iter  5:  1.4001  ← n_estimators 5000, lr 0.005        [+1.4%]
+Iter  7:  1.4056  ← subsample=0.8, subsample_freq=1    [+0.4%]
+Iter  8:  1.4313  ← every 2nd era (2× training data)   [+1.8%]
+Iter 10:  1.4544  ← max_depth=6, num_leaves=63         [+1.6%]
+Iter 12:  1.4786  ← max_depth=7, num_leaves=127        [+1.7%]  ★ best single model
+Iter 13:  1.5504  ← 3-target ensemble                  [+4.8%]  ★ best overall
+```
+
+**Experiments that failed (8 total):**
+- Ranking predictions within era: −54% (catastrophic)
+- colsample_bytree 0.1→0.3: −0.7%
+- Using all eras (no downsampling): −5.6%
+- min_child_samples=200: −0.2%
+- target_cyrus (wrong column name): crashed
+- Per-era mean-centering: 0% (no effect)
+- XGBoost + LightGBM ensemble: 0% (vs single-model baseline, not tested fairly)
+- colsample_bytree alone: −0.7%
+
+**Overall:**
+- 8 successful improvements out of 15 experiments (53% hit rate)
+- Total gain: **+84.2% CORR Sharpe** (0.8415 → 1.5504)
+- Zero lines of model code written by a human
+- Best result achieved by a technique (target ensembling) the human operator
+  had listed as a suggestion but had not implemented themselves
