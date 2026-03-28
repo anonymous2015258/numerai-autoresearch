@@ -8,8 +8,8 @@ You are running ONE iteration of an automated ML improvement pipeline for the Nu
 - Read `train.py` — current model code
 
 ### 2. Determine the current best score
-Parse `results.tsv` and find the highest `corr_sharpe` among all rows with `status=success`.
-If no successful rows exist yet, treat any result as an improvement (first run establishes baseline).
+Check `program.md` for a line starting with `BATCH_BASELINE:` — if present, use that value as the reference score instead of scanning results.tsv.
+Otherwise, parse `results.tsv` and find the highest `corr_sharpe` among all rows with `status=success`.
 
 ### 3. Propose ONE change
 Based on `program.md` and what has already been tried in `results.tsv`, choose ONE focused idea that

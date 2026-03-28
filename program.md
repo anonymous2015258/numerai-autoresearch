@@ -11,6 +11,10 @@ Secondary goal: keep **MMC Sharpe > 0** (we want to be additive to the Numerai M
   num_leaves=127, colsample_bytree=0.1, subsample=0.8, subsample_freq=1,
   DOWNSAMPLE_EVERY_N_ERAS=2, single target ("target")
 
+BATCH_BASELINE: 1.4786
+(The 1.550357 in results.tsv was from a 3-target ensemble that took 60+ min/iter — too slow, rolled back.
+Compare all experiments against 1.4786, not 1.550357.)
+
 ---
 
 ## ✅ Already explored (do NOT retry these)
