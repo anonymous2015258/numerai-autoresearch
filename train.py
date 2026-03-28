@@ -1,4 +1,4 @@
-# EXPERIMENT: 2-target ensemble (target + target_cyrusd_20) with DOWNSAMPLE_EVERY_N_ERAS=4 for faster runtime
+# EXPERIMENT: 2-target ensemble (target + target_cyrusd_20) with num_leaves=255 (2^8-1) for deeper trees
 
 import json
 import numpy as np
@@ -16,7 +16,7 @@ MODEL_PARAMS = dict(
     n_estimators=5000,
     learning_rate=0.005,
     max_depth=7,
-    num_leaves=2**7 - 1,
+    num_leaves=2**8 - 1,
     colsample_bytree=0.1,
     subsample=0.8,
     subsample_freq=1,
