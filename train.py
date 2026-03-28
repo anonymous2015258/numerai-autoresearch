@@ -1,4 +1,4 @@
-# EXPERIMENT: 2-target ensemble (target + target_cyrusd_20) with num_leaves=255 (2^8-1) for deeper trees
+# EXPERIMENT: 2-target ensemble (target + target_victor_20) with num_leaves=255 to test victor signal
 
 import json
 import numpy as np
@@ -10,7 +10,7 @@ from numerapi import NumerAPI
 DATA_VERSION = "v5.2"
 FEATURE_SET = "medium"         # "small" | "medium" | "all"
 DOWNSAMPLE_EVERY_N_ERAS = 4    # 4 = every 4th era (faster for ensembles)
-TARGETS = ["target", "target_cyrusd_20"]
+TARGETS = ["target", "target_victor_20"]
 
 MODEL_PARAMS = dict(
     n_estimators=5000,
