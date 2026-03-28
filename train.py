@@ -1,4 +1,4 @@
-# EXPERIMENT: increase max_depth to 6 and num_leaves to 63 for moderately deeper trees
+# EXPERIMENT: increase max_depth to 7 and num_leaves to 127 for deeper trees with more leaves
 
 import json
 import pandas as pd
@@ -14,8 +14,8 @@ TARGET_COL = "target"
 MODEL_PARAMS = dict(
     n_estimators=5000,
     learning_rate=0.005,
-    max_depth=6,
-    num_leaves=2**6 - 1,
+    max_depth=7,
+    num_leaves=2**7 - 1,
     colsample_bytree=0.1,
     subsample=0.8,
     subsample_freq=1,
