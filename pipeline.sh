@@ -77,12 +77,18 @@ while true; do
     echo "━━━ Iteration $ITERATION  [$TIMESTAMP] ━━━"
     echo "━━━ Iteration $ITERATION  [$TIMESTAMP] ━━━" >> "$LOG_FILE"
 
-    # Run one Claude Code iteration (non-interactive), timeout after 60 min
-    timeout 3600 "$CLAUDE_BIN" \
+    # Run one Claude Code iteration with a 60-min timeout (macOS-compatible)
+    "$CLAUDE_BIN" \
         --allowedTools "Read,Edit,Write,Bash,Glob,Grep" \
         --model claude-sonnet-4-6 \
         -p "$(cat "$SCRIPT_DIR/loop_prompt.md")" \
-        2>&1 | tee -a "$LOG_FILE" || echo "[pipeline] iteration $ITERATION timed out or errored — continuing" | tee -a "$LOG_FILE"
+        2>&1 | tee -a "$LOG_FILE" &
+    CLAUDE_PID=$!
+    # Watchdog: kill after 3600s if still running
+    ( sleep 3600; kill "$CLAUDE_PID" 2>/dev/null && echo "[pipeline] iteration $ITERATION killed by 60-min watchdog" | tee -a "$LOG_FILE" ) &
+    WATCHDOG_PID=$!
+    wait "$CLAUDE_PID" || true
+    kill "$WATCHDOG_PID" 2>/dev/null || true
 
     echo "" | tee -a "$LOG_FILE"
 
