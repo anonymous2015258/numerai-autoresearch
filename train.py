@@ -1,4 +1,4 @@
-# EXPERIMENT: add subsample=0.8 and subsample_freq=1 for stochastic row sampling regularization
+# EXPERIMENT: downsample every 2nd era instead of every 4th to double training data
 
 import json
 import pandas as pd
@@ -8,7 +8,7 @@ from numerapi import NumerAPI
 # --- Config (agent edits this section) ---
 DATA_VERSION = "v5.2"
 FEATURE_SET = "medium"         # "small" | "medium" | "all"
-DOWNSAMPLE_EVERY_N_ERAS = 4    # 1 = use all eras, 4 = every 4th era (faster)
+DOWNSAMPLE_EVERY_N_ERAS = 2    # 1 = use all eras, 4 = every 4th era (faster)
 TARGET_COL = "target"
 
 MODEL_PARAMS = dict(
