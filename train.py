@@ -1,4 +1,4 @@
-# EXPERIMENT: baseline lgbm small features
+# EXPERIMENT: switch from small to medium features (780 features)
 
 import json
 import pandas as pd
@@ -7,7 +7,7 @@ from numerapi import NumerAPI
 
 # --- Config (agent edits this section) ---
 DATA_VERSION = "v5.2"
-FEATURE_SET = "small"          # "small" | "medium" | "all"
+FEATURE_SET = "medium"         # "small" | "medium" | "all"
 DOWNSAMPLE_EVERY_N_ERAS = 4    # 1 = use all eras, 4 = every 4th era (faster)
 TARGET_COL = "target"
 
