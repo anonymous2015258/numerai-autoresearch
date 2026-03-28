@@ -4,12 +4,12 @@
 Maximize **CORR Sharpe** on the held-out validation eras.
 Secondary goal: keep **MMC Sharpe > 0** (we want to be additive to the Numerai Meta Model).
 
-## Current best (after 11 iterations)
-- CORR Sharpe: **1.5504**
-- MMC Sharpe: 0.855
+## Current best (rolling back to single-model baseline for speed)
+- CORR Sharpe: **1.4786** (commit 085176f)
+- MMC Sharpe: 0.896
 - Config: medium features (780), LightGBM, n_estimators=5000, lr=0.005, max_depth=7,
   num_leaves=127, colsample_bytree=0.1, subsample=0.8, subsample_freq=1,
-  downsample every 2nd era, target ensemble (target + target_cyrusd_20 + target_victor_20)
+  DOWNSAMPLE_EVERY_N_ERAS=2, single target ("target")
 
 ---
 
@@ -23,7 +23,8 @@ Secondary goal: keep **MMC Sharpe > 0** (we want to be additive to the Numerai M
 - [x] use all eras / no downsampling (worse — old eras have distribution drift)
 - [x] max_depth 5→6, num_leaves 31→63 (small win)
 - [x] target_cyrus — CRASHED due to wrong name. Correct name: `target_cyrusd_20`
-- [x] target ensemble (target + target_cyrusd_20 + target_victor_20) — big win (+0.072 corr_sharpe)
+- [x] target ensemble (target + target_cyrusd_20 + target_victor_20) — corr_sharpe=1.550 but 60+ min/iter (too slow, rolled back)
+- [x] per-era mean-centering — untested but abandoned due to runtime; worth trying with DOWNSAMPLE_EVERY_N_ERAS=4
 
 ---
 
@@ -91,7 +92,11 @@ May require more RAM but worth trying.
 ---
 
 ## Constraints
-- Must run in < 45 minutes total (train + evaluate)
+- **Target runtime: < 30 minutes total** (train + evaluate). The 3-model ensemble on every-2nd-era takes 60+ min — too slow.
+- To keep iterations fast, follow these rules:
+  - **Ensembles (multiple targets or models):** set `DOWNSAMPLE_EVERY_N_ERAS = 4` to reduce training data
+  - **Single model experiments:** `DOWNSAMPLE_EVERY_N_ERAS = 2` is fine
+  - **Max 2 targets** in any ensemble — 3 targets × every-2nd-era exceeds 60 min
 - No external data sources
 - No new pip installs — xgboost and numpy are already installed
 - Output file interface must stay the same: `validation_predictions.parquet` with columns `[era, prediction, target]`
