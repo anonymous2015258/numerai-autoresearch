@@ -1,4 +1,4 @@
-# EXPERIMENT: switch from small to medium features (780 features)
+# EXPERIMENT: increase n_estimators to 5000 with learning_rate=0.005 for better generalization
 
 import json
 import pandas as pd
@@ -12,8 +12,8 @@ DOWNSAMPLE_EVERY_N_ERAS = 4    # 1 = use all eras, 4 = every 4th era (faster)
 TARGET_COL = "target"
 
 MODEL_PARAMS = dict(
-    n_estimators=2000,
-    learning_rate=0.01,
+    n_estimators=5000,
+    learning_rate=0.005,
     max_depth=5,
     num_leaves=2**5 - 1,
     colsample_bytree=0.1,
