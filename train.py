@@ -1,4 +1,4 @@
-# EXPERIMENT: increase n_estimators to 5000 with learning_rate=0.005 for better generalization
+# EXPERIMENT: add subsample=0.8 and subsample_freq=1 for stochastic row sampling regularization
 
 import json
 import pandas as pd
@@ -17,6 +17,8 @@ MODEL_PARAMS = dict(
     max_depth=5,
     num_leaves=2**5 - 1,
     colsample_bytree=0.1,
+    subsample=0.8,
+    subsample_freq=1,
 )
 # -------------------------------------------
 
