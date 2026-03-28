@@ -1,4 +1,4 @@
-# EXPERIMENT: 2-target ensemble (target + target_victor_20) with num_leaves=255 to test victor signal
+# EXPERIMENT: target+cyrusd_20 ensemble with colsample_bytree=0.05 for stronger feature regularization
 
 import json
 import numpy as np
@@ -10,14 +10,14 @@ from numerapi import NumerAPI
 DATA_VERSION = "v5.2"
 FEATURE_SET = "medium"         # "small" | "medium" | "all"
 DOWNSAMPLE_EVERY_N_ERAS = 4    # 4 = every 4th era (faster for ensembles)
-TARGETS = ["target", "target_victor_20"]
+TARGETS = ["target", "target_cyrusd_20"]
 
 MODEL_PARAMS = dict(
     n_estimators=5000,
     learning_rate=0.005,
     max_depth=7,
-    num_leaves=2**8 - 1,
-    colsample_bytree=0.1,
+    num_leaves=2**7 - 1,
+    colsample_bytree=0.05,
     subsample=0.8,
     subsample_freq=1,
 )
