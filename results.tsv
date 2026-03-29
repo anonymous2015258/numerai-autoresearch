@@ -1,1 +1,22 @@
 commit_hash	corr_mean	corr_sharpe	mmc_sharpe	max_drawdown	status	description
+851c553	0.012324	0.841522	0.387854	0.032358	success	baseline lgbm small features
+851c553	0.012324	0.841522	0.387879	0.032358	failed	rank predictions within each era before outputting
+b220f0e	0.022080	1.380848	0.840229	0.035534	success	switch from small to medium features (780 features)
+b220f0e	0.021370	1.371815	0.778918	0.030334	failed	increase colsample_bytree from 0.1 to 0.3 for richer feature sampling per tree
+6c70690	0.022484	1.400036	0.806860	0.037836	success	increase n_estimators to 5000 with learning_rate=0.005 for better generalization
+6c70690	0.000000	0.000000	0.000000	0.000000	crashed	train on target_cyrus instead of target for stronger signal
+b7fb752	0.022537	1.405551	0.830178	0.029884	success	add subsample=0.8 and subsample_freq=1 for stochastic row sampling regularization
+d354719	0.023287	1.431304	0.864321	0.078092	success	downsample every 2nd era instead of every 4th to double training data
+d354719	0.022821	1.351930	0.879590	0.184540	failed	use all eras for training (no downsampling) to maximize training data
+9c315d1	0.023495	1.454364	0.875340	0.052371	success	increase max_depth to 6 and num_leaves to 63 for moderately deeper trees
+9c315d1	0.023605	1.451309	0.872077	0.059494	failed	add min_child_samples=200 for leaf-level regularization to reduce overfitting
+085176f	0.023601	1.478617	0.896172	0.039218	success	increase max_depth to 7 and num_leaves to 127 for deeper trees with more leaves
+b307f5f	0.023355	1.550357	0.854827	0.041731	success	ensemble predictions from 3 targets (target, target_cyrusd_20, target_victor_20) to improve CORR and MMC
+457285e	0.023601	1.478617	0.896172	0.039218	failed	per-era mean-centering of predictions (subtract era mean to remove era-level bias)
+457285e	0.023601	1.478617	0.896172	0.039218	failed	XGBoost + LightGBM ensemble (average predictions) with DOWNSAMPLE_EVERY_N_ERAS=4
+74be9b3	0.022943	1.552679	0.829237	0.023950	success	2-target ensemble (target + target_cyrusd_20) with DOWNSAMPLE_EVERY_N_ERAS=4 for faster runtime
+03d338b	0.023094	1.552182	0.843391	0.025005	success	2-target ensemble (target + target_cyrusd_20) with num_leaves=255 (2^8-1) for deeper trees
+f87a256	0.022905	1.488322	0.801402	0.026448	success	2-target ensemble (target + target_victor_20) with num_leaves=255 to test victor signal
+454af92	0.022751	1.561481	0.776477	0.022005	success	target+cyrusd_20 ensemble with colsample_bytree=0.05 for stronger feature regularization
+523178a	0.022814	1.526599	0.792984	0.098125	success	evaluate on all validation eras (remove validation downsampling) for more stable corr_sharpe estimate
+297172f	0.022809	1.534383	0.800195	0.100252	success	add reg_lambda=1.0 (L2 regularization) to target+cyrusd_20 ensemble for additional regularization

@@ -1,0 +1,20 @@
+# Numerai data files (large, downloaded at runtime)
+v5.0/
+v5.1/
+v5.2/
+v4.3/
+*.parquet
+*.pkl
+
+# Runtime outputs
+metrics.json
+__pycache__/
+*.pyc
+.DS_Store
+
+# Personal notes (not part of the runnable pipeline)
+ARTICLE_NOTES.md
+LESSONS.md
+
+# Jupyter checkpoints
+.ipynb_checkpoints/

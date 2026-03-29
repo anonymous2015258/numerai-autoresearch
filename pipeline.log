@@ -1,0 +1,69 @@
+━━━ Iteration 1  [2026-03-28 12:26:18] ━━━
+[success] corr_sharpe=0.8415 — baseline lgbm small features
+
+━━━ Iteration 2  [2026-03-28 12:43:59] ━━━
+[failed] corr_sharpe=0.8415 (+0.0000) — rank predictions within each era (CORR scoring is already per-era; ranking is redundant)
+
+━━━ Iteration 3  [2026-03-28 12:45:54] ━━━
+[success] corr_sharpe=1.3808 (+0.5393) — switched from small (42) to medium (780) features
+
+━━━ Iteration 4  [2026-03-28 12:49:38] ━━━
+[failed] corr_sharpe=1.3718 (-0.0090) — increase colsample_bytree from 0.1 to 0.3
+
+━━━ Iteration 5  [2026-03-28 12:55:18] ━━━
+[success] corr_sharpe=1.4001 (+0.0192) — n_estimators 2000→5000, learning_rate 0.01→0.005
+
+━━━ Iteration 6  [2026-03-28 13:05:36] ━━━
+[crashed] corr_sharpe=0.0000 — target_cyrus column not found (correct name: target_cyrusd_20)
+
+━━━ Iteration 7  [2026-03-28 13:06:38] ━━━
+[success] corr_sharpe=1.4056 (+0.0054) — add subsample=0.8, subsample_freq=1
+
+━━━ Iteration 8  [2026-03-28 13:12:56] ━━━
+[success] corr_sharpe=1.4313 (+0.0257) — downsample every 2nd era instead of every 4th (2x training data)
+
+━━━ Iteration 9  [2026-03-28 13:24:49] ━━━
+[failed] corr_sharpe=1.3519 (-0.0794) — use all eras (no downsampling) hurt due to distribution drift in old eras
+
+━━━ Iteration 10  [2026-03-28 13:47:05] ━━━
+[success] corr_sharpe=1.4544 (+0.0231) — max_depth 5→6, num_leaves 31→63
+
+━━━ Iteration 11  [2026-03-28 14:01:55] ━━━
+[failed] corr_sharpe=1.4513 (-0.0031) — add min_child_samples=200 (over-regularized at this depth)
+
+━━━ Iteration 12  [2026-03-28 14:29:34] ━━━
+[success] corr_sharpe=1.4786 (+0.0243) — max_depth 6→7, num_leaves 63→127
+
+━━━ Iteration 13  [2026-03-28 14:49:07] ━━━
+[success] corr_sharpe=1.5504 (+0.0718) — 3-target ensemble (target + target_cyrusd_20 + target_victor_20)
+NOTE: 3-target ensemble took 65+ min/iter — rolled back to single-model for faster iteration
+
+--- ROLLBACK to single-model baseline (corr_sharpe=1.4786, BATCH_BASELINE set) ---
+
+━━━ Iteration 14  [2026-03-28 17:46:05] ━━━
+[failed] corr_sharpe=1.4786 — per-era mean-centering (no effect; Numerai scoring already normalises per era)
+
+━━━ Iteration 15  [2026-03-28 18:27:13] ━━━
+[failed] corr_sharpe=1.4786 — XGBoost + LightGBM ensemble (compared against wrong baseline, inconclusive)
+
+━━━ Iteration 16  [2026-03-28 18:28:25] ━━━
+[success] corr_sharpe=1.5527 (+0.0741 vs BATCH_BASELINE 1.4786) — 2-target ensemble (target + target_cyrusd_20), DOWNSAMPLE=4
+
+━━━ Iteration 17  [2026-03-28 18:57:29] ━━━
+[success] corr_sharpe=1.5522 (+0.0736 vs BATCH_BASELINE) — num_leaves 127→255; plateau, negligible gain
+
+━━━ Iteration 18  [2026-03-28 19:16:54] ━━━
+[success] corr_sharpe=1.4883 (+0.0097 vs BATCH_BASELINE) — swap target_cyrusd_20 for target_victor_20; victor much weaker
+
+━━━ Iteration 19  [2026-03-28 19:35:18] ━━━
+[success] corr_sharpe=1.5615 (+0.0829 vs BATCH_BASELINE) — colsample_bytree 0.1→0.05; NEW BEST
+
+━━━ Iteration 20  [2026-03-28 19:51:41] ━━━
+[success] corr_sharpe=1.5266 — evaluate on all validation eras (315 eras vs 75); more stable estimate
+
+━━━ Iteration 21  [2026-03-28 20:30:16] ━━━
+[success] corr_sharpe=1.5344 (+0.0078 on full eval) — add reg_lambda=1.0 L2 regularization
+
+━━━ Pipeline stopped by user after 21 iterations ━━━
+Best overall:            corr_sharpe=1.5615 (iteration 19)
+Best on full validation: corr_sharpe=1.5344 (iteration 21)

@@ -1,4 +1,4 @@
-# EXPERIMENT: add reg_lambda=1.0 (L2 regularization) to target+cyrusd_20 ensemble for additional regularization
+# EXPERIMENT: add extra_trees=True to target+cyrusd_20 ensemble for random split thresholds (ExtraTrees-style variance reduction)
 
 import json
 import numpy as np
@@ -21,6 +21,7 @@ MODEL_PARAMS = dict(
     subsample=0.8,
     subsample_freq=1,
     reg_lambda=1.0,
+    extra_trees=True,
 )
 # -------------------------------------------
 
