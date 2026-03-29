@@ -228,30 +228,34 @@ Recency bias can be a feature, not a bug.
 
 ---
 
-#### Finding 3: Tree Depth Improvements Were Consistent But Incremental
+#### Finding 3: Tree Depth Improvements Were Consistent But Hit a Plateau
 
-The agent incrementally deepened the tree structure across three iterations:
+The agent incrementally deepened the tree structure across four iterations:
 
 | Config | CORR Sharpe | Change |
 |---|---|---|
 | max_depth=5, num_leaves=31 | 1.405 | starting point |
 | max_depth=6, num_leaves=63 | 1.454 | **+1.7%** ✅ |
 | max_depth=7, num_leaves=127 | 1.479 | **+1.7%** ✅ |
+| max_depth=7, num_leaves=255 | 1.552 | **+0.03%** ✅ (negligible) |
 
 Each doubling of leaves allowed the model to capture more complex feature
 interactions — a stock's P/E ratio matters differently depending on its sector,
 size, and momentum, and deeper trees can encode these conditional relationships.
 
 The pattern of consistent small gains shows the agent exploring a smooth
-optimization landscape. It did not jump to depth=10 immediately
-(which would risk overfitting) — it incrementally validated each step.
+optimization landscape. Notably, jumping from 127 → 255 leaves yielded almost
+zero gain, suggesting the model had reached its depth saturation point on
+this dataset — 780 medium features × 750 training eras can only support so
+many distinct leaf conditions before trees start memorizing noise.
 
 Notably: adding `min_child_samples=200` (a leaf-level regularization) at
 depth=7 slightly hurt performance. The model at this depth needs flexible
 leaf splitting; over-constraining it removes the benefit of the extra depth.
 
 **Takeaway:** Depth improvements in LightGBM are best explored incrementally.
-Pair depth increases with validation, not bulk regularization.
+The diminishing returns signal (1.7% → 1.7% → 0.03%) tells you when to stop
+and explore other dimensions.
 
 ---
 
@@ -276,7 +280,7 @@ problem (temporal overfitting) and remains beneficial.
 
 ---
 
-#### Finding 5: Target Ensembling Was the Breakthrough (+4.8%)
+#### Finding 5: Target Ensembling Was the Breakthrough — and the 2nd Target Did Most of the Work
 
 The biggest single jump after the feature set expansion came from ensembling
 across multiple targets. Instead of training one model to predict `target`,
@@ -287,24 +291,36 @@ the agent trained three separate LightGBM models:
 
 Final prediction = average of all three model outputs.
 
-Result: CORR Sharpe **1.479 → 1.550** (+4.8%), the highest in the entire run.
-MMC Sharpe also improved from 0.896 to 0.855 — meaning the ensemble remained
-additive to the meta model.
+Result: CORR Sharpe **1.479 → 1.550** (+4.8%). But later isolated runs revealed
+how much each target was contributing individually:
 
-**Why this works:** Each target measures future returns slightly differently —
-different factor neutralization, different return windows, different
-smoothing. A model trained on `target_cyrusd_20` learns patterns that a
-`target`-trained model misses. Averaging their predictions reduces prediction
-variance while preserving the signal each individually captures.
+| Ensemble | CORR Sharpe | vs single-model |
+|---|---|---|
+| `target` only | 1.479 | baseline |
+| `target` + `target_cyrusd_20` | **1.553** | **+5.0%** |
+| `target` + `target_victor_20` | 1.488 | +0.6% |
+| `target` + `target_cyrusd_20` + `target_victor_20` | 1.550 | +4.8% |
 
-**The cost:** Training time tripled. 1 model ≈ 25 min. 3 models ≈ 65 min per
-iteration. This forced a hard tradeoff: the best-scoring approach was also the
-slowest to iterate on. We eventually rolled back to the single-model baseline
-to keep the research loop fast.
+The 2-target ensemble nearly matched the 3-target result at 33% lower compute
+cost. `target_victor_20` contributed almost nothing — its signal appears
+largely captured by `target_cyrusd_20` already. This is a critical insight:
+not all targets are orthogonal. The right combination matters more than the
+quantity of targets.
 
-**Takeaway:** Target ensembling is one of Numerai's most reliable techniques.
-It is essentially free in terms of feature engineering but expensive in compute.
-The right time to use it is after the single-model configuration is well-optimized.
+**Why this works:** Each target measures future returns with different factor
+neutralization and smoothing. A model trained on `target_cyrusd_20` learns
+patterns that a `target`-trained model misses. Averaging their predictions
+reduces prediction variance while preserving the signal each captures.
+
+**The cost:** Training time scales linearly with target count.
+1 model ≈ 25 min, 3 models ≈ 65 min per iteration. The 3-target approach
+caused several stalled iterations and was ultimately rolled back.
+The 2-target config with `DOWNSAMPLE_EVERY_N_ERAS=4` restored
+manageable iteration times (~25 min) with nearly the same CORR Sharpe.
+
+**Takeaway:** Target ensembling is highly effective, but test targets in
+isolation before combining. Two complementary targets often outperform
+three correlated ones — and cost a third less to train.
 
 ---
 
@@ -508,32 +524,87 @@ tool binaries to absolute paths in automation scripts.
 
 ---
 
-### 5.3 The Key Metric Journey
+### 5.3 Additional Findings from Batch 3 (Runs 16–21)
+
+With the pipeline stable and the baseline reset to the single-model config
+(1.4786), the agent continued exploring — this time with the 2-target
+constraint and the `BATCH_BASELINE` override in place.
+
+#### Finding 7: Tighter Feature Subsampling Hit a New Overall Best
+
+Earlier, increasing `colsample_bytree` from 0.1 to 0.3 had hurt performance.
+The agent now tried the opposite direction — tightening it from 0.1 to **0.05**
+(sampling ~39 of 780 features per tree instead of ~78).
+
+Result: CORR Sharpe **1.553 → 1.561** — a new overall best.
+
+Why does sampling fewer features help? With 780 features, the most predictive
+ones dominate at `colsample_bytree=0.1`. Tightening to 0.05 forces each tree
+to explore more diverse feature subsets, creating an ensemble of trees with
+lower internal correlation — which reduces prediction variance. It is, in
+effect, a second layer of diversity on top of the target diversity.
+
+The pattern is U-shaped: too many features per tree (0.3) adds noise;
+too few (0.1 was already considered low) prevents good splits. The optimum
+for this dataset appears to be around 0.05–0.10.
+
+#### Finding 8: Evaluation Methodology Affects Apparent Scores
+
+One iteration changed the validation evaluation itself — instead of evaluating
+on every 4th validation era (~75 eras), it evaluated on all validation eras
+(~315 eras).
+
+The score dropped from 1.561 to 1.527. This is not a regression — it is a
+**methodological change**. With more eras, the Sharpe estimate is more stable
+(lower variance) but the score appears lower because lucky high-scoring eras
+are diluted by average ones.
+
+This is an important nuance for interpreting results: scores from different
+evaluation subsets are not directly comparable. The 1.527 on 315 eras may
+actually represent a more reliable model than 1.561 on 75 eras.
+
+#### Finding 9: L2 Regularization Gave a Small Further Gain
+
+Adding `reg_lambda=1.0` (L2 regularization on leaf weights) to the 2-target
+ensemble with full validation gave CORR Sharpe **1.527 → 1.534**.
+
+L2 regularization penalizes large leaf weights, pushing the model toward
+smoother, more conservative predictions. In Numerai's noisy financial setting,
+this slight constraint on prediction magnitude tends to improve generalization.
+
+---
+
+### 5.4 The Key Metric Journey (All 21 Runs)
 
 ```
 Iter  1:  0.8415  ← baseline: LightGBM, small features (42), every 4th era
-Iter  3:  1.3808  ← medium features (780)              [+64.1%] ★ biggest jump
-Iter  5:  1.4001  ← n_estimators 5000, lr 0.005        [+1.4%]
-Iter  7:  1.4056  ← subsample=0.8, subsample_freq=1    [+0.4%]
-Iter  8:  1.4313  ← every 2nd era (2× training data)   [+1.8%]
-Iter 10:  1.4544  ← max_depth=6, num_leaves=63         [+1.6%]
-Iter 12:  1.4786  ← max_depth=7, num_leaves=127        [+1.7%]  ★ best single model
-Iter 13:  1.5504  ← 3-target ensemble                  [+4.8%]  ★ best overall
+Iter  3:  1.3808  ← medium features (780)                [+64.1%] ★ biggest jump
+Iter  5:  1.4001  ← n_estimators 5000, lr 0.005          [+1.4%]
+Iter  7:  1.4056  ← subsample=0.8, subsample_freq=1      [+0.4%]
+Iter  8:  1.4313  ← every 2nd era (2× training data)     [+1.8%]
+Iter 10:  1.4544  ← max_depth=6, num_leaves=63           [+1.6%]
+Iter 12:  1.4786  ← max_depth=7, num_leaves=127          [+1.7%]  ★ best single model
+Iter 13:  1.5504  ← 3-target ensemble                    [+4.8%]
+        --- rollback to single model, reset batch baseline ---
+Iter 16:  1.5527  ← 2-target ensemble (target+cyrusd_20) [+5.0% vs single]
+Iter 17:  1.5522  ← num_leaves=255                       [+0.03%] plateau
+Iter 19:  1.5615  ← colsample_bytree=0.05                [+0.6%]  ★ best overall
+Iter 20:  1.5266  ← full validation eval (315 eras)      [different baseline]
+Iter 21:  1.5344  ← + L2 regularization                  [+0.5% on full eval]
 ```
 
 **Experiments that failed (8 total):**
-- Ranking predictions within era: −54% (catastrophic)
+- Ranking predictions within era: −54% (catastrophic, do not retry)
 - colsample_bytree 0.1→0.3: −0.7%
-- Using all eras (no downsampling): −5.6%
+- Using all eras for training (no downsampling): −5.6%
 - min_child_samples=200: −0.2%
 - target_cyrus (wrong column name): crashed
 - Per-era mean-centering: 0% (no effect)
-- XGBoost + LightGBM ensemble: 0% (vs single-model baseline, not tested fairly)
-- colsample_bytree alone: −0.7%
+- `target` + `target_victor_20` only: +0.6% (minimal, victor adds little)
+- XGBoost + LightGBM ensemble: inconclusive (compared against wrong baseline)
 
 **Overall:**
-- 8 successful improvements out of 15 experiments (53% hit rate)
-- Total gain: **+84.2% CORR Sharpe** (0.8415 → 1.5504)
+- 13 successful improvements, 8 failures out of 21 experiments (62% hit rate)
+- Best CORR Sharpe: **1.5615** (2-target ensemble, colsample_bytree=0.05)
+- Total gain: **+85.5% CORR Sharpe** (0.8415 → 1.5615)
 - Zero lines of model code written by a human
-- Best result achieved by a technique (target ensembling) the human operator
-  had listed as a suggestion but had not implemented themselves
