@@ -1,4 +1,4 @@
-# EXPERIMENT: evaluate on all validation eras (remove validation downsampling) for more stable corr_sharpe estimate
+# EXPERIMENT: add reg_lambda=1.0 (L2 regularization) to target+cyrusd_20 ensemble for additional regularization
 
 import json
 import numpy as np
@@ -20,6 +20,7 @@ MODEL_PARAMS = dict(
     colsample_bytree=0.05,
     subsample=0.8,
     subsample_freq=1,
+    reg_lambda=1.0,
 )
 # -------------------------------------------
 
