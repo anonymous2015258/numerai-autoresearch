@@ -1,4 +1,4 @@
-# EXPERIMENT: target+cyrusd_20 ensemble with colsample_bytree=0.05 for stronger feature regularization
+# EXPERIMENT: evaluate on all validation eras (remove validation downsampling) for more stable corr_sharpe estimate
 
 import json
 import numpy as np
@@ -50,8 +50,6 @@ validation = pd.read_parquet(
     columns=["era", "data_type"] + TARGETS + features,
 )
 validation = validation[validation["data_type"] == "validation"].drop(columns=["data_type"])
-validation = validation[validation["era"].isin(validation["era"].unique()[::DOWNSAMPLE_EVERY_N_ERAS])]
-
 # Embargo the 4 eras following the last train era to prevent data leakage
 # (targets look 20 business days / ~4 eras forward)
 last_train_era = int(train["era"].unique()[-1])
